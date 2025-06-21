@@ -18,6 +18,7 @@ problem is FAILED).
     - first try: 15.15%
     - second try 15.15%
 - **gpt-3.5-turbo-0125**: 3.03%
+- **gemini-2.5-pro**: 42.42%
 
 ## Refferences:
 
