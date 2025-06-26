@@ -10,11 +10,11 @@ problem is FAILED).
 
 ## Performances:
 
-- **gpt-4.1-2025-04-14** : (*I did 2 tries on this one*)
+- **gpt-4.1-2025-04-14** : (*I did 2 bechmarks/evaluations on this one*)
     - first try: 18.18% total accuracy
     - second try: 15.15%
 - **gpt-4o-2024-11-20** : 9.09%
-- **claude-3-7-sonnet** : (*I did 2 tries*)
+- **claude-3-7-sonnet** : (*I did 2 bechmarks/evaluations*)
     - first try: 15.15%
     - second try 15.15%
 - **gpt-3.5-turbo-0125**: 3.03%
