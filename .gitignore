@@ -1,7 +1,6 @@
 cmbagent_env
 cmbagent_output
 data
-.cache
-python/evaluation/.cache
-python/evaluation/.ipynb_checkpoints
-python/evaluation/__pycache__/
+.cache/
+.ipynb_checkpoints/
+__pycache__/
