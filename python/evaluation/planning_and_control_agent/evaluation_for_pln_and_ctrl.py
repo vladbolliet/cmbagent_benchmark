@@ -94,7 +94,7 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
     print("\n============ BENCHMARK SUMMARY FOR CMBAGENT FOR ALL PROBLEMS ==============")
 
     problems_solved = 0
-    total_benchmark_time = 0
+    #total_benchmark_time = 0
     total_problems = len(results_summary)
     all_costs = []
     failed_problems_due_to_execution_limit = 0
@@ -110,7 +110,7 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
               f"  Total test cases: {stats['total']}\n"
               f"  Correctly solved test cases: {stats['correct']}\n"
               f"  Problem solved: {stats['problem_passed']}\n"
-              f"  Time to run: {stats['problem_time']}\n"
+              #f"  Time to run: {stats['problem_time']}\n"
         )
 
         # print error information for every problem
@@ -130,7 +130,7 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
             elif stats['error_code'] == "wrong_answer":
                 failed_problems_due_to_wrong_result += 1
             
-        total_benchmark_time += stats['problem_time']
+        #total_benchmark_time += stats['problem_time']
         
         cost_df = stats.get("cost_dataframe")
         if isinstance(cost_df, pd.DataFrame) and not cost_df.empty:
@@ -145,7 +145,7 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
     print("============ CONCLUSION ===============")
     print(
     f"Average accuracy over all problems: {average_accuracy:.2f}%\n"
-    f"Total benchmark time: {total_benchmark_time:.2f}s\n"
+    #f"Total benchmark time: {total_benchmark_time:.2f}s\n"
     f"Percentage of problems failed due to execution limit reached: {percentage_of_pbs_with_execution_limit_reached:.2f}%\n"
     f"Percentage of problems failed due to wrong answer in one of test cases: {percentage_of_pbs_with_wrong_result:.2f}%\n"
     f"Percentage of problems failed due to error in code OR wrong return type: {(percentage_of_pbs_with_error_in_code + percentage_of_pbs_with_wrong_return_type):.2f}%"
@@ -218,14 +218,16 @@ def find_result_in_cmbagent_string(cmbagent_answer: dict) -> list[int] | None:
 # In[10]:
 
 
-def extract_code(model_answer: dict) -> str | None:
-    content = model_answer["chat_history"][2]["content"]
-    matches = re.findall(r"<code>(.*?)</code>", content, re.DOTALL)
-    if matches:
-        return matches[-1].strip()  # Return the last <code>...</code> block
-    print("⚠️ No <code>...</code> block found.")
-    return None
-
+def extract_code(results):
+    code_str = results['chat_history'][-1]['content']
+    matches = re.findall(r"```python\n(.*?)```", code_str, re.DOTALL)
+    
+    if not matches:
+        print("No code block found.")
+        return None
+    
+    final_code = matches[-1].strip()
+    return final_code
 
 # In[11]:
 
@@ -307,10 +309,7 @@ def run_python_code_locally_for_one_test_case(code_str: str, input_data: list[in
 
 # main benchamrk function for cmbagent
 
-def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: str, agent: str) -> dict:
-
-    if agent not in {"engineer", "researcher"}:
-        raise ValueError("Agent must be 'engineer' or 'researcher'")
+def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: str) -> dict:
 
     results_summary = {}
     all_problem_costs = []  # collect all cost DataFrames here
@@ -326,7 +325,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
         print("===============================================================")
 
         problem_has_passed = False
-        total_time = 0
+        #total_time = 0
         error_code = ""
         
         test_cases = load_test_cases_for_one_problem(problem_id, problem_dir)
@@ -337,20 +336,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
 
         example_input, example_output = test_cases[0]
 
-        if agent == "engineer":
-            prompt = (
-                f"Task: {problem['description']}\n"
-                f"Example:\n"
-                f"Input: {example_input}\n"
-                f"Expected Output: {example_output}\n"
-                f"Deliver the result strictly as a Python list:\n"
-                f"\t- If the result is a single integer n, return it as [n]\n"
-                f"\t- If the result is a list, return it as [a, b, c, ...]\n"
-                f"Do not include any extra text, explanation, or formatting."
-            )
-
-        else:  # researcher
-            prompt = (
+        prompt = (
                 f"Task:\n"
                 f"Write python code. A function to solve the problem: {problem['description']}\n\n"
                 f"Requirements:\n"
@@ -364,19 +350,31 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
                 f"- Input and output are python lists. For output:\n"
                 f"  - Return [n] for a single integer result.\n"
                 f"  - Return [a, b, c, ...] for a list result.\n"
-            )
+        )
 
-            model_answer = cmbagent.one_shot(
-                prompt,
-                max_rounds=10,
-                agent='researcher',
-                researcher_model=cmbagent_model,
-            )
-
-            total_time += model_answer['execution_time']
-
-            code_str = extract_code(model_answer)
-
+        model_answer = cmbagent.planning_and_control_context_carryover(
+                              prompt,
+                              max_rounds_control = 5,
+                              n_plan_reviews = 3,
+                              max_n_attempts = 2,
+                              max_plan_steps=5,
+                              default_llm_model = "gpt-4.1-2025-04-14",
+                              engineer_model = "gemini-2.5-pro-preview-03-25",
+                              camb_context_model = "gemini-2.5-pro-preview-03-25",
+                              researcher_model = "gpt-4.1-2025-04-14",
+                              plan_reviewer_model = "claude-3-7-sonnet-20250219",
+                            #                               plan_instructions=r"""
+                            # Use camb_context agent to start and then engineer agent for the whole analysis. 
+                            # The plan must have 3 steps or more. 
+                            # """
+                            #                               plan_instructions=r"""
+                            # Use engineer for whole analysis except in last step where you should use researcher to report on results. Plan must have 2 steps.
+                            # """,
+                              #restart_at_step = 1,
+        )     
+        
+        #total_time += model_answer['execution_time']
+        code_str = extract_code(model_answer)
         correct = 0
         cost_dfs = []
 
@@ -384,78 +382,48 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
 
             total_test_cases = len(test_cases) - 1
 
-            if agent == "engineer":
+            print(f"Executing code for TEST CASE {i}/{total_test_cases}, on problem {problem_index}/{total_problems}")
 
-                if i > 1:
-                    print("========================================================")
-                    print(f"\t\tNEXT TEST CASE ({i}/{total_test_cases}, on problem {problem_index}/{total_problems})")
-                    print("========================================================\n")
-
-                test_prompt = (
-                    prompt +
-                    f"\nFind the answer for the following input:\n{input_list}\nOutput: ?"
+            try:
+                result_from_code = run_python_code_locally_for_one_test_case(code_str, input_list)
+            except TimeoutError as e:
+                print(f"[TIMEOUT] Test case {i} on problem {problem_index} took too long and was terminated.\n"
+                      f"Problem failed due to execution time out of limit. Skipping the rest of the test cases"
                 )
-
-                model_answer = cmbagent.one_shot(
-                    test_prompt,
-                    max_rounds=10,
-                    agent='engineer',
-                    engineer_model=cmbagent_model,
+                error_code = "execution_limit_reached"
+                break
+            except RuntimeError as e:
+                print(f"[ERROR] Runtime error on test case {i} problem {problem_index}: {e}\n"
+                      f"Problem failed due to error in code. Skipping the rest of the test cases"
                 )
+                error_code = "error_in_code"
+                break
 
-                parsed_answer = find_result_in_cmbagent_string(model_answer)
+            if not (isinstance(result_from_code, list) and all(isinstance(item, int) for item in result_from_code)):
+                print(f"Result for TEST CASE ({i}/{total_test_cases}), on problem ({problem_index}/{total_problems}) is NOT an int list"
+                      f"Problem failed. Skipping the rest of the test cases."
+                     )
+                error_code = "not_int_list"
+                break
+                
 
-                if parsed_answer == expected_output:
-                    correct += 1
-                total += 1
+            if result_from_code == expected_output:
+                correct += 1
+            else:
+                print(f"Result for TEST CASE ({i}/{total_test_cases}), on problem ({problem_index}/{total_problems}) was WRONG.\n"
+                      f"Problem failed. Skipping the rest of the test cases."
+                )
+                error_code = "wrong_answer"
+                break
 
-                cost_df = model_answer["final_context"].data.get("cost_dataframe", pd.DataFrame())
-                if not cost_df.empty:
-                    cost_df = cost_df[cost_df["Agent"] != "Total"]
-                    cost_dfs.append(cost_df)
-
-            else:  # researcher agent
-
-                print(f"Executing code for TEST CASE {i}/{total_test_cases}, on problem {problem_index}/{total_problems}")
-
-                try:
-                    result_from_code = run_python_code_locally_for_one_test_case(code_str, input_list)
-                except TimeoutError as e:
-                    print(f"[TIMEOUT] Test case {i} on problem {problem_index} took too long and was terminated.\n"
-                          f"Problem failed due to execution time out of limit. Skipping the rest of the test cases"
-                    )
-                    error_code = "execution_limit_reached"
-                    break
-                except RuntimeError as e:
-                    print(f"[ERROR] Runtime error on test case {i} problem {problem_index}: {e}\n"
-                          f"Problem failed due to error in code. Skipping the rest of the test cases"
-                    )
-                    error_code = "error_in_code"
-                    break
-
-                if not (isinstance(result_from_code, list) and all(isinstance(item, int) for item in result_from_code)):
-                    print(f"Result for TEST CASE ({i}/{total_test_cases}), on problem ({problem_index}/{total_problems}) is NOT an int list"
-                          f"Problem failed. Skipping the rest of the test cases."
-                         )
-                    error_code = "not_int_list"
-                    break
+            if i == 1:
+                # extract cost data from researcher response once per problem
+                researcher_cost_df = model_answer["final_context"].data.get("cost_dataframe", pd.DataFrame())
+                if not researcher_cost_df.empty:
+                    researcher_cost_df = researcher_cost_df[researcher_cost_df["Agent"] != "Total"]
+                    cost_dfs.append(researcher_cost_df)
                     
-
-                if result_from_code == expected_output:
-                    correct += 1
-                else:
-                    print(f"Result for TEST CASE ({i}/{total_test_cases}), on problem ({problem_index}/{total_problems}) was WRONG.\n"
-                          f"Problem failed. Skipping the rest of the test cases."
-                    )
-                    error_code = "wrong_answer"
-                    break
-
-                if i == 1:
-                    # extract cost data from researcher response once per problem
-                    researcher_cost_df = model_answer["final_context"].data.get("cost_dataframe", pd.DataFrame())
-                    if not researcher_cost_df.empty:
-                        researcher_cost_df = researcher_cost_df[researcher_cost_df["Agent"] != "Total"]
-                        cost_dfs.append(researcher_cost_df)
+        # end of test cases' "for"
 
         if total_test_cases == correct:
             problem_has_passed = True
@@ -476,7 +444,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
             "total": total_test_cases,
             "correct": correct,
             "problem_passed": problem_has_passed,
-            "problem_time": total_time,
+            #"problem_time": total_time,
             "error_code": error_code
             #"cost_dataframe": problem_cost_df  # optional per problem cost
         }
@@ -487,7 +455,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
         print(f"Problem solved: {problem_has_passed}")
 
         c += 1
-        if c == 33:
+        if c == 5:
             break
 
     print("⚠️ Skipped problems due to non-numeric data (or no test cases):")
@@ -559,7 +527,7 @@ def run_benchmark(
     # evaluate cmbagent on problems
 
     if eval_cmbagent: 
-        resultscmb = run_benchmark_on_cmbagent(problems, problem_dir, cmbagent_model, "researcher")
+        resultscmb = run_benchmark_on_cmbagent(problems, problem_dir, cmbagent_model)
         print_cmbagent_benchmark_summary(resultscmb)
 
 
