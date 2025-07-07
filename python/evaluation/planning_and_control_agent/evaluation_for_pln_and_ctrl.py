@@ -1,11 +1,3 @@
-# THIS PYTHON FILE WAS CONVERTED FROM A VERSION OF evaluatino.ipynb WITH 'nbconvert'
-
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
 # imports
 from typing import Optional 
 import json
@@ -18,38 +10,49 @@ import re # for regex
 import ast  # safe way to parse Python literals like lists, dicts
 import pandas as pd
 from tabulate import tabulate #for printing pretty tables in the terminal.
-
-
-# In[2]:
-
-
-# get API KEYs
-
-#os.environ['OPENAI_API_KEY'] = getpass('Enter your OpenAI API key: ')
-openai.api_key = os.getenv("OPENAI_API_KEY")
-anthropic.Client(api_key=os.getenv("ANTHROPIC_API_KEY"))
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/mnt/p/stage/camels-453517-7c2faf50eda2.json"
-
-
-# In[3]:
-
-
-# essential functions
-
-
-# In[4]:
-
+from dotenv import load_dotenv
+import random
 
 # Load all problems from a JSON file into a python dict
 
-def load_problems(json_path: str) -> dict: 
+def load_problems(
+    json_path: str,
+    tests_dir: str,
+    nb_bronze_pbs: int = 0,
+    nb_silver_pbs: int = 0,
+    nb_gold_pbs: int = 0,
+    nb_platinum_pbs: int = 0
+) -> dict:
     with open(json_path, 'r') as f:
         problems = json.load(f)
-    return problems
 
+    if nb_bronze_pbs == 0 and nb_silver_pbs == 0 and nb_gold_pbs == 0 and nb_platinum_pbs == 0:
+        return problems
 
-# In[5]:
+    level_limits = {
+        'bronze': min(nb_bronze_pbs, 123),
+        'silver': min(nb_silver_pbs, 100),
+        'gold': min(nb_gold_pbs, 63),
+        'platinum': min(nb_platinum_pbs, 21),
+    }
 
+    level_groups = {'bronze': [], 'silver': [], 'gold': [], 'platinum': []}
+    for key, info in problems.items():
+        level = info.get('problem_level')
+        if level in level_groups:
+            try:
+                _ = load_test_cases_for_one_problem(key, tests_dir)
+                level_groups[level].append((key, info))
+            except Exception as e:
+                print(f"❌ Skipping {key} due to test case error: {e}")
+
+    selected = {}
+    for level, limit in level_limits.items():
+        sampled = random.sample(level_groups[level], min(limit, len(level_groups[level])))
+        for key, info in sampled:
+            selected[key] = info
+
+    return selected
 
 # load_test_cases_for_one_problem as a list of tuples of lists
 
@@ -83,10 +86,6 @@ def load_test_cases_for_one_problem(problem_id: str, tests_dir: str) -> list | N
         print("No test cases found")
         return None
 
-
-# In[6]:
-
-
 def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
     from tabulate import tabulate
     import pandas as pd
@@ -96,7 +95,8 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
     problems_solved = 0
     #total_benchmark_time = 0
     total_problems = len(results_summary)
-    all_costs = []
+    total_cost_df = 0
+    total_time = 0
     failed_problems_due_to_execution_limit = 0
     failed_problems_due_to_error_in_code = 0
     failed_problems_due_to_wrong_result = 0
@@ -114,8 +114,6 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
         )
 
         # print error information for every problem
-
-        # save data for benchamrk conclusion
         
         if stats['problem_passed']:
             problems_solved += 1
@@ -129,12 +127,11 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
                 failed_problems_due_to_wrong_return_type += 1
             elif stats['error_code'] == "wrong_answer":
                 failed_problems_due_to_wrong_result += 1
-            
-        #total_benchmark_time += stats['problem_time']
-        
-        cost_df = stats.get("cost_dataframe")
-        if isinstance(cost_df, pd.DataFrame) and not cost_df.empty:
-            all_costs.append(cost_df[cost_df["Agent"] != "Total"])  # only agent-level rows
+                
+        # get cost and time per problem (and add up)
+
+        total_cost_df += results_summary[problem_id]['cost_and_time_dataframe']['total_planning_cost_df'] + results_summary[problem_id]['cost_and_time_dataframe']['total_control_cost_df']
+        total_time += results_summary[problem_id]['cost_and_time_dataframe']['total_planning_time'] + results_summary[problem_id]['cost_and_time_dataframe']['total_control_time']
 
     average_accuracy = (problems_solved / total_problems) * 100 if total_problems > 0 else 0
     percentage_of_pbs_with_execution_limit_reached = (failed_problems_due_to_execution_limit/total_problems) * 100 if total_problems > 0 else 0
@@ -145,81 +142,50 @@ def print_cmbagent_benchmark_summary(results_summary: dict) -> None:
     print("============ CONCLUSION ===============")
     print(
     f"Average accuracy over all problems: {average_accuracy:.2f}%\n"
-    #f"Total benchmark time: {total_benchmark_time:.2f}s\n"
     f"Percentage of problems failed due to execution limit reached: {percentage_of_pbs_with_execution_limit_reached:.2f}%\n"
     f"Percentage of problems failed due to wrong answer in one of test cases: {percentage_of_pbs_with_wrong_result:.2f}%\n"
-    f"Percentage of problems failed due to error in code OR wrong return type: {(percentage_of_pbs_with_error_in_code + percentage_of_pbs_with_wrong_return_type):.2f}%"
+    f"Percentage of problems failed due to error in code OR wrong return type: {(percentage_of_pbs_with_error_in_code + percentage_of_pbs_with_wrong_return_type):.2f}%\n"
+    f"Total benchmark time: {total_time:.2f}s\n"
+    f"Total cost:\n{total_cost_df}\n"
+
 )
-    print("=======================================")
-
-    # Final benchmark-wide cost aggregation
-    if all_costs:
-        benchmark_cost_df = pd.concat(all_costs, ignore_index=True)
-        benchmark_cost_df = benchmark_cost_df.groupby("Agent", as_index=False).sum(numeric_only=True)
-        total_row = benchmark_cost_df.drop(columns=["Agent"]).sum(numeric_only=True)
-        total_row["Agent"] = "Total"
-        benchmark_cost_df = pd.concat([benchmark_cost_df, pd.DataFrame([total_row])], ignore_index=True)
-
-        print("======================= FINAL BENCHMARK COST SUMMARY =======================")
-        print(tabulate(benchmark_cost_df, headers="keys", tablefmt="github"))
-        print("============================================================================\n")
-
-
-# In[7]:
-
-
-# functions for evaluating cmbagent with agent = 'engineer' (executes code by himself)
-
-
-# In[8]:
-
 
 # find result found by cmbagent through execution with regex
 
-def find_result_in_cmbagent_string(cmbagent_answer: dict) -> list[int] | None:
-    last_execution_output_message = None
+# def find_result_in_cmbagent_string(cmbagent_answer: dict) -> list[int] | None:
+#     last_execution_output_message = None
 
-    for message in reversed(cmbagent_answer['chat_history']):
-        content = message.get('content', '')
-        if "Execution output:" in content:
-            last_execution_output_message = content
-            break
+#     for message in reversed(cmbagent_answer['chat_history']):
+#         content = message.get('content', '')
+#         if "Execution output:" in content:
+#             last_execution_output_message = content
+#             break
 
-    if last_execution_output_message:
-        match = re.search(r'Execution output:\s*(.*)', last_execution_output_message)
-        if match:
-            result_str = match.group(1).strip()
-            try:
-                # Safely parse the string representation of a Python literal (like a list)
-                result_list = ast.literal_eval(result_str)
-                # Optional: verify it's a list of ints
-                if isinstance(result_list, list) and all(isinstance(x, int) for x in result_list):
-                    return result_list
-                else:
-                    print("Parsed result is not a list of ints:", result_list)
-                    return None
-            except Exception as e:
-                print("Error parsing output string:", e)
-                return None
-        else:
-            print("Pattern found but couldn't parse output.")
-            return None
-    else:
-        print("No execution output found in chat history.")
-        return None
-
-
-# In[9]:
-
-
-# functions for evaluating cmbagent with agent = 'researcher' (execute code locally)
-
-
-# In[10]:
-
+#     if last_execution_output_message:
+#         match = re.search(r'Execution output:\s*(.*)', last_execution_output_message)
+#         if match:
+#             result_str = match.group(1).strip()
+#             try:
+#                 # Safely parse the string representation of a Python literal (like a list)
+#                 result_list = ast.literal_eval(result_str)
+#                 # Optional: verify it's a list of ints
+#                 if isinstance(result_list, list) and all(isinstance(x, int) for x in result_list):
+#                     return result_list
+#                 else:
+#                     print("Parsed result is not a list of ints:", result_list)
+#                     return None
+#             except Exception as e:
+#                 print("Error parsing output string:", e)
+#                 return None
+#         else:
+#             print("Pattern found but couldn't parse output.")
+#             return None
+#     else:
+#         print("No execution output found in chat history.")
+#         return None
 
 def extract_code(results):
-    code_str = results['chat_history'][-1]['content']
+    code_str = results['final_context']['previous_steps_execution_summary']
     matches = re.findall(r"```python\n(.*?)```", code_str, re.DOTALL)
     
     if not matches:
@@ -228,9 +194,6 @@ def extract_code(results):
     
     final_code = matches[-1].strip()
     return final_code
-
-# In[11]:
-
 
 # run python code locally
 
@@ -276,38 +239,56 @@ def run_python_code_locally_for_one_test_case(code_str: str, input_data: list[in
 
     return payload  # success case
 
-
-# old version:
-# def run_python_code_locally_for_one_test_case(code_str: str, input_data: list[int]) -> list[int]:
-#     exec_locals = {}
-
-#     # run code 
-
-#     try:
-#         exec(code_str, {}, exec_locals)
-#     except Exception as e:
-#         raise RuntimeError(f"Code execution failed: {e}")
-
-#     # get main function
-
-#     main_func = exec_locals.get("main_function")
-
-#     if not main_func:
-#         raise RuntimeError("No function named 'main_function' found in code.")
-
-#     # run example on function
-
-#     try:
-#         result = main_func(input_data)
-#     except Exception as e:
-#         raise RuntimeError(f"Error when calling main_function: {e}")
-
-#     # return result (it is an array)
-
-#     return result
-
-
 # main benchamrk function for cmbagent
+
+def get_problem_cost_and_time():
+    base_dir = "/mnt/p/stage/cmbagent_benchmark/python/evaluation/planning_and_control_agent/cmbagent_output"
+
+    def listdir_no_hidden(path):
+        return [f for f in os.listdir(path) if not f.startswith(".") and not os.path.basename(f).startswith(".")]
+
+    # --- Planning Cost ---
+    planning_cost_path = os.path.join(base_dir, "planning", "cost")
+    planning_cost_files = listdir_no_hidden(planning_cost_path)
+    planning_cost_file = planning_cost_files[0]
+    with open(os.path.join(planning_cost_path, planning_cost_file)) as f:
+        planning_cost_list = json.load(f)
+    total_planning_cost_df = pd.DataFrame([planning_cost_list[-1]])
+    total_planning_cost_df = total_planning_cost_df.select_dtypes(include='number')  # keep only numeric
+
+    # --- Planning Time ---
+    planning_time_path = os.path.join(base_dir, "planning", "time")
+    planning_time_files = listdir_no_hidden(planning_time_path)
+    planning_time_file = planning_time_files[0]
+    with open(os.path.join(planning_time_path, planning_time_file)) as f:
+        total_planning_time = json.load(f)["total_time"]
+
+    # --- Control Cost ---
+    control_cost_path = os.path.join(base_dir, "control", "cost")
+    total_costs = []
+    for fname in listdir_no_hidden(control_cost_path):
+        with open(os.path.join(control_cost_path, fname)) as f:
+            cost_list = json.load(f)
+            total_costs.append(cost_list[-1])
+    df = pd.DataFrame(total_costs)
+    total_control_cost_df = df.drop(columns=["Agent"], errors="ignore").sum(numeric_only=True).to_frame().T
+
+    # --- Control Time ---
+    control_time_path = os.path.join(base_dir, "control", "time")
+    total_control_time = 0
+    for fname in listdir_no_hidden(control_time_path):
+        with open(os.path.join(control_time_path, fname)) as f:
+            total_control_time += json.load(f)["total_time"]
+
+    # --- Final Output ---
+    problem_cost_and_time = {
+        "total_planning_cost_df": total_planning_cost_df,
+        "total_planning_time": total_planning_time,
+        "total_control_cost_df": total_control_cost_df,
+        "total_control_time": total_control_time,
+    }
+
+    return problem_cost_and_time
 
 def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: str) -> dict:
 
@@ -316,7 +297,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
     skipped_problems = []
 
     total_problems = len(problems)
-    c = 0
+    # c = 0
 
     for problem_index, (problem_id, problem) in enumerate(problems.items(), start=1):
 
@@ -341,7 +322,7 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
                 f"Write python code. A function to solve the problem: {problem['description']}\n\n"
                 f"Requirements:\n"
                 f"- The main function must be named `main_function`, even if helper functions are needed.\n"
-                f"- Include all code inside a single <code> ... </code> block, even if you revise it.\n"
+                # f"- Include all code inside a single <code> ... </code> block, even if you revise it.\n"
                 f"- No extra text or explanation, only the code block.\n"
                 f"- Execution time must stay under 4 seconds, even for large inputs.\n\n"
                 f"Format:\n"
@@ -363,17 +344,16 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
                               camb_context_model = "gemini-2.5-pro-preview-03-25",
                               researcher_model = "gpt-4.1-2025-04-14",
                               plan_reviewer_model = "claude-3-7-sonnet-20250219",
-                            #                               plan_instructions=r"""
-                            # Use camb_context agent to start and then engineer agent for the whole analysis. 
-                            # The plan must have 3 steps or more. 
-                            # """
-                            #                               plan_instructions=r"""
-                            # Use engineer for whole analysis except in last step where you should use researcher to report on results. Plan must have 2 steps.
-                            # """,
+                              plan_instructions=r"""
+                            Use engineer for whole analysis; at the end, provide the full final code, including only the main function (and any                              necessary helpers). The plan must have between 3 and 5 steps.
+                            """
                               #restart_at_step = 1,
         )     
+
+        # get time and cost
+
+        problem_cost_and_time = get_problem_cost_and_time()
         
-        #total_time += model_answer['execution_time']
         code_str = extract_code(model_answer)
         correct = 0
         cost_dfs = []
@@ -416,76 +396,45 @@ def run_benchmark_on_cmbagent(problems: dict, problem_dir: str, cmbagent_model: 
                 error_code = "wrong_answer"
                 break
 
-            if i == 1:
-                # extract cost data from researcher response once per problem
-                researcher_cost_df = model_answer["final_context"].data.get("cost_dataframe", pd.DataFrame())
-                if not researcher_cost_df.empty:
-                    researcher_cost_df = researcher_cost_df[researcher_cost_df["Agent"] != "Total"]
-                    cost_dfs.append(researcher_cost_df)
-                    
         # end of test cases' "for"
 
         if total_test_cases == correct:
             problem_has_passed = True
-
-        # Aggregate cost for this problem
-
-        if cost_dfs:
-            problem_cost_df = pd.concat(cost_dfs, ignore_index=True)
-            problem_cost_df = problem_cost_df.groupby("Agent", as_index=False).sum(numeric_only=True)
-            total_row = problem_cost_df.drop(columns=["Agent"]).sum(numeric_only=True)
-            total_row["Agent"] = "Total"
-            problem_cost_df = pd.concat([problem_cost_df, pd.DataFrame([total_row])], ignore_index=True)
-            all_problem_costs.append(problem_cost_df[problem_cost_df["Agent"] != "Total"])
-        else:
-            problem_cost_df = pd.DataFrame()
-
-        results_summary[problem_id] = {
-            "total": total_test_cases,
-            "correct": correct,
-            "problem_passed": problem_has_passed,
-            #"problem_time": total_time,
-            "error_code": error_code
-            #"cost_dataframe": problem_cost_df  # optional per problem cost
-        }
 
         print(f"\n =========== BENCHMARK RESULT FOR CMBAGENT ON PROBLEM {problem_id} ============\n")
         print(f"Total test cases: {total_test_cases}")
         print(f"Correctly guessed test_cases: {correct}")
         print(f"Problem solved: {problem_has_passed}")
 
-        c += 1
-        if c == 5:
-            break
+        # saving problem info
+
+        results_summary[problem_id] = {
+            "total": total_test_cases,
+            "correct": correct,
+            "problem_passed": problem_has_passed,
+            "error_code": error_code,
+            "cost_and_time_dataframe": problem_cost_and_time
+        }
+
+        # c += 1
+        # if c == 5:
+        #     break
 
     print("⚠️ Skipped problems due to non-numeric data (or no test cases):")
     for pid in skipped_problems:
         print(f"- {pid}")
 
-    # Aggregate total cost across all problems
-    if all_problem_costs:
-        total_cost_df = pd.concat(all_problem_costs, ignore_index=True)
-        total_cost_df = total_cost_df.groupby("Agent", as_index=False).sum(numeric_only=True)
-        total_row = total_cost_df.drop(columns=["Agent"]).sum(numeric_only=True)
-        total_row["Agent"] = "Total"
-        total_cost_df = pd.concat([total_cost_df, pd.DataFrame([total_row])], ignore_index=True)
-
-        print("\n=== Total aggregated cost across all problems ===")
-        print(tabulate(total_cost_df, headers="keys", tablefmt="github"))
-    else:
-        print("No cost data available to summarize.")
-
     return results_summary
-
-
-# In[13]:
-
 
 # main wrapper function (this one is called by user and 'does all the work')
 
 def run_benchmark(
     problem_json: str,
     problem_dir: str, 
+    bronze_pbs: int = 0,
+    silver_pbs: int = 0,
+    gold_pbs: int = 0,
+    platinum_pbs: int = 0,
     eval_cmbagent: bool = True, 
     cmbagent_model: Optional[str] = None,
     eval_normal_llm: bool = False, 
@@ -505,6 +454,8 @@ def run_benchmark(
         None
     """
 
+    load_dotenv(dotenv_path="/mnt/p/stage/cmbagent_benchmark/.env", override=True)
+
     # Validate arguments
 
     if not eval_cmbagent and not eval_normal_llm:
@@ -520,9 +471,16 @@ def run_benchmark(
     if eval_cmbagent and not cmbagent_model:
         raise ValueError("cmbagent_model must be provided if eval_cmbagent is True")
 
+    # get API KEYs
+    
+    #os.environ['OPENAI_API_KEY'] = getpass('Enter your OpenAI API key: ')
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    anthropic.Client(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/mnt/p/stage/camels-453517-7c2faf50eda2.json"
+
     # Load problems
 
-    problems = load_problems(problem_json)
+    problems = load_problems(problem_json, problem_dir, bronze_pbs, silver_pbs, gold_pbs, platinum_pbs)
 
     # evaluate cmbagent on problems
 
@@ -548,54 +506,3 @@ def run_benchmark(
     print("Benchmark evaluation completed.")
 
     return resultscmb
-
-
-# In[14]:
-
-
-# examples
-
-
-# In[26]:
-
-
-# # benchmark on 4 extremely easy problems to make sure everything works properly
-
-# info = run_benchmark(
-#     problem_json="/mnt/p/stage/cmbagent_benchmark/data/clean/easy_custom_samples.json",
-#     problem_dir="/mnt/p/stage/cmbagent_benchmark/data/clean/easy_tests",
-#     eval_cmbagent=True,
-#     cmbagent_model="gpt-4o-mini"
-# )
-
-# print(info)
-
-
-# # In[28]:
-
-
-# # test for one long problem (for seeing if compilation takes too long)
-# run_benchmark("/mnt/p/stage/cmbagent_benchmark/data/clean/long_pb.json",
-#               "/mnt/p/stage/cmbagent_benchmark/data/clean/test_for_long_problem",
-#               eval_cmbagent=True,
-#               cmbagent_model="gpt-4o-mini",
-#               eval_normal_llm=False)
-
-
-# # In[15]:
-
-
-# # REAL USACO TEST: 33 PROBLEMS (manually limited)
-
-# run_benchmark("/mnt/p/stage/cmbagent_benchmark/data/clean/usaco_clean_307.json",
-#               "/mnt/p/stage/cmbagent_benchmark/data/clean/usaco_tests",
-#               eval_cmbagent=True,
-#               cmbagent_model="gpt-4o-mini",
-#               eval_normal_llm=False)
-
-
-# # In[ ]:
-
-
-
-
