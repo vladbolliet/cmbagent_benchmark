@@ -1,7 +1,30 @@
 cmbagent_env
 cmbagent_output
+cmbagent_output_archive
 data
 .cache/
 .ipynb_checkpoints/
 __pycache__/
+*.pyc
 .env
+
+# Benchmark results (optional - uncomment to ignore)
+# benchmark_results/
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+*.swp
+*.swo
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+new_code_v4/benchmark_output/
+old_code/
+CMBAGENT_OUTPUT_GUIDE.md
+run_current_benchmark.py
+test_read.sh
+understanding_cmbagent_oneshot_output.py
