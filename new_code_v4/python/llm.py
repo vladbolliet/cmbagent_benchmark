@@ -91,7 +91,7 @@ def extract_code_block(code_str: str) -> str:
     # If nothing found, return empty string
     return ''
 
-def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_prices: dict) -> LLM_response:
+def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_prices: dict, work_dir: str = None) -> LLM_response:
     llm_type = find_llm_type(agent, llm_token_prices)
     # Get max_output_tokens from config
     max_tokens = None
@@ -144,14 +144,32 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
                     task=prompt,
                     max_rounds=5,
                     agent='engineer',
-                    engineer_model='gpt-4.1-2025-04-14'
+                    engineer_model='gpt-4.1-2025-04-14',
+                    work_dir=work_dir
                 )
             )[1],
             'extract_code': lambda response: next((extract_code_block(msg['content']) for msg in reversed(response['chat_history']) if extract_code_block(msg['content'])), ''),
             'extract_tokens': lambda response: (
                 0, 0
             )
-        }
+        },
+        # 'planning_and_control': {
+        #     'client': None,
+        #     'call': lambda client: (
+        #         print("[INFO] Using cached cmbagent module..."),
+        #         cmbagent_module.planning_and_control(
+        #             task=prompt,
+        #             max_rounds=5,
+        #             agent='engineer',
+        #             engineer_model='gpt-4.1-2025-04-14',
+        #             work_dir=work_dir
+        #         )
+        #     )[1],
+        #     'extract_code': lambda response: next((extract_code_block(msg['content']) for msg in reversed(response['chat_history']) if extract_code_block(msg['content'])), ''),
+        #     'extract_tokens': lambda response: (
+        #         0, 0
+        #     )
+        # }
     }
 
     client = extraction_map[llm_type]['client']
@@ -161,7 +179,7 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
     generation_time = end_time - start_time
     generated_code = extraction_map[llm_type]['extract_code'](response)
     prompt_tokens, completion_tokens = extraction_map[llm_type]['extract_tokens'](response)
-    if llm_type == 'oneshot':
+    if llm_type in ['oneshot', 'planning_and_control']:
         cost_df = response['final_context'].get('cost_dataframe', '')
         cost_df_str = str(cost_df)
         lines = cost_df_str.splitlines()

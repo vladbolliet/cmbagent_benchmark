@@ -7,11 +7,22 @@ from python.llm import prompt_wrapper, get_llm_response, find_llm_type
 from python.executor import run_test_cases
 from dotenv import load_dotenv
 
+import datetime
 # load argument from command line
 parser = argparse.ArgumentParser()
 parser.add_argument('--benchmark_file', type=str, required=True, help='Path to the run json benchmark file')
 args = parser.parse_args()
 benchmark_file = args.benchmark_file
+
+# Determine run folder structure
+run_time_str = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+run_base_dir = pathlib.Path("/mnt/p/stage/cmbagent_benchmark/new_code_v4/benchmark_output/runs") / run_time_str
+run_base_dir.mkdir(parents=True, exist_ok=True)
+
+# Place benchmark_file inside run_base_dir
+benchmark_file_new = run_base_dir / pathlib.Path(benchmark_file).name
+os.rename(benchmark_file, benchmark_file_new)
+benchmark_file = str(benchmark_file_new)
 
 # Start the benchmark
 print("\n\033[1;36m====================[ BENCHMARK RUNNER ]====================\033[0m")
@@ -94,8 +105,8 @@ for llm_type in llm_types:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
 benchmark_dict['results'] = {agent: {} for agent in agents}
+
 for agent in agents:
-    
     agent_idx = agents.index(agent) + 1
     print(f"\n\033[1;34m---[ Agent {agent_idx}/{len(agents)}: {agent} ]---\033[0m")
     agent_summary = {
@@ -114,21 +125,32 @@ for agent in agents:
     total_count = 0
     problem_ids_list = list(problems.keys())
     total_problems = len(problem_ids_list)
+
+    llm_type = find_llm_type(agent, llm_token_prices)
+    # Only create agent subfolder for oneshot and planning_and_control
+    if llm_type in ['oneshot', 'planning_and_control']:
+        agent_dir = run_base_dir / llm_type
+        agent_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        agent_dir = None
+
     for problem_idx, problem_id in enumerate(problem_ids_list, 1):
         print(f"\033[1;32mProblem {problem_idx}/{total_problems}:\033[0m {problem_id}\n")
-        # make prompt
         prompt = prompt_wrapper(problems[problem_id]['description'])
-        # Get LLM response
-        llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices) # LLM_Response object
-        # run the code on all test cases
+        # For oneshot/planning_and_control, create a folder for each problem and set work_dir
+        if llm_type in ['oneshot', 'planning_and_control']:
+            problem_dir = agent_dir / problem_id
+            problem_dir.mkdir(parents=True, exist_ok=True)
+            work_dir = str(problem_dir)
+            llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices, work_dir=work_dir)
+        else:
+            llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices)
         test_case_result = run_test_cases(llm_response.generated_code, pathlib.Path(test_cases_folder_path) / problem_id)
-        # Structure result as requested
         generation_info = llm_response.__dict__ if hasattr(llm_response, '__dict__') else llm_response
         benchmark_dict['results'][agent][problem_id] = {
             'generation_info': generation_info,
             'execution_info': test_case_result
         }
-        # Update agent summary
         agent_summary["total_generation_time"] += generation_info.get("generation_time", 0.0)
         agent_summary["total_cost"] += generation_info.get("generation_cost", 0.0)
         status = test_case_result.get("status", "system_error")

@@ -277,10 +277,14 @@ create_new_benchmark() {
     mkdir -p "$SCRIPT_DIR/benchmark_output/configs"
     mkdir -p "$SCRIPT_DIR/benchmark_output/runs"
 
-    local config_file="$SCRIPT_DIR/benchmark_output/configs/config_$(date +%Y%m%d_%H%M%S).yaml"
-    local run_file="$SCRIPT_DIR/benchmark_output/runs/run_$(date +%Y%m%d_%H%M%S).json"
+    local run_timestamp=$(date +%Y%m%d_%H%M%S)
+    local config_file="$SCRIPT_DIR/benchmark_output/configs/config_${run_timestamp}.yaml"
+    local run_dir="$SCRIPT_DIR/benchmark_output/runs/run_${run_timestamp}"
+    mkdir -p "$run_dir"
+    local run_file="$run_dir/run_${run_timestamp}.json"
     touch "$config_file"
     echo -e "\033[1;32mConfig file created:\033[0m $config_file"
+    echo -e "\033[1;32mRun directory created:\033[0m $run_dir"
     echo -e "\033[1;32mRun file created:\033[0m $run_file"
 
     # Initialize run file with config path
@@ -502,12 +506,16 @@ run_existing_benchmark() {
         echo "Generating new problems based on config settings..."
         mapfile -t selected_problem_ids < <(generate_problems_from_config "$config_file")
         
-        local run_file="$SCRIPT_DIR/benchmark_output/runs/run_$(date +%Y%m%d_%H%M%S).json"
+        local run_timestamp=$(date +%Y%m%d_%H%M%S)
+        local run_dir="$SCRIPT_DIR/benchmark_output/runs/run_${run_timestamp}"
+        mkdir -p "$run_dir"
+        local run_file="$run_dir/run_${run_timestamp}.json"
         jq -n --arg config_path "$config_file" --argjson problem_ids "$(printf '%s\n' "${selected_problem_ids[@]}" | jq -R . | jq -s .)" '{config_path: $config_path, problem_ids: $problem_ids}' > "$run_file"
         echo "Run file created: $run_file"
         echo "Selected $(echo "${selected_problem_ids[@]}" | wc -w) problems based on config settings"
-    echo -e "\033[1;32mRun file created:\033[0m $run_file"
-    echo -e "\033[1;34mSelected $(echo "${selected_problem_ids[@]}" | wc -w) problems based on config settings\033[0m"
+        echo -e "\033[1;32mRun directory created:\033[0m $run_dir"
+        echo -e "\033[1;32mRun file created:\033[0m $run_file"
+        echo -e "\033[1;34mSelected $(echo "${selected_problem_ids[@]}" | wc -w) problems based on config settings\033[0m"
         python "$SCRIPT_DIR/run_benchmark.py" --benchmark_file "$run_file"
     elif [[ "$run_choice" == "2" ]]; then
         # Use run JSON file
@@ -527,12 +535,16 @@ run_existing_benchmark() {
         fi
         
         # Create new run file with same settings
-        local new_run_file="$SCRIPT_DIR/benchmark_output/runs/run_$(date +%Y%m%d_%H%M%S).json"
+        local run_timestamp=$(date +%Y%m%d_%H%M%S)
+        local run_dir="$SCRIPT_DIR/benchmark_output/runs/run_${run_timestamp}"
+        mkdir -p "$run_dir"
+        local new_run_file="$run_dir/run_${run_timestamp}.json"
         jq -n --arg config_path "$config_path" --argjson problem_ids "$problem_ids" '{config_path: $config_path, problem_ids: $problem_ids}' > "$new_run_file"
         echo "New run file created: $new_run_file"
         echo "Using same problems as previous run: $(echo "$problem_ids" | jq -r '. | length') problems"
-    echo -e "\033[1;32mNew run file created:\033[0m $new_run_file"
-    echo -e "\033[1;34mUsing same problems as previous run: $(echo "$problem_ids" | jq -r '. | length') problems\033[0m"
+        echo -e "\033[1;32mRun directory created:\033[0m $run_dir"
+        echo -e "\033[1;32mNew run file created:\033[0m $new_run_file"
+        echo -e "\033[1;34mUsing same problems as previous run: $(echo "$problem_ids" | jq -r '. | length') problems\033[0m"
         python "$SCRIPT_DIR/run_benchmark.py" --benchmark_file "$new_run_file"
     fi
 }

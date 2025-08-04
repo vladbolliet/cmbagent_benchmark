@@ -126,12 +126,34 @@ cmbagent:
   - name: oneshot
   - name: planning_and_control
 ``` 
-TODO: Next file to implement cmbagent in: run_benchmark.py
 
+# EXAMPLE USE OF PLANNING_AND_CONTROL
+```python
+task="""
+Write a function which takes 2 strings as input and returns the number of characters as output.
+"""
+model_answer = cmbagent.planning_and_control_context_carryover(
+                              task=task,
+                              max_rounds_planning = 5,
+                              max_rounds_control = 5,
+                              max_plan_steps=5,
+                              n_plan_reviews = 2,
+                              plan_instructions="Engineer agent should generate Python code for the problem, researcher agent should validate correctness and edge cases.",
+                              engineer_instructions="Write efficient, clean Python code.",
+                              researcher_instructions="Check code for correctness, edge cases, and performance.",
+                              hardware_constraints="Code should run in <10 seconds and use only standard Python libraries.",
+                              max_n_attempts = 2,
+                              default_llm_model = "gpt-4.1-2025-04-14",
+                              planner_model = "gpt-4.1-2025-04-14",
+                              plan_reviewer_model = "claude-3-7-sonnet-20250219",
+                              engineer_model = "gemini-2.5-pro",
+                              researcher_model = "gpt-4.1-2025-04-14"
+        )     
+```
+RESULT OF RUNNING THAT:
+```python
 
-
-
-
+```
 
 
 
