@@ -417,17 +417,16 @@ create_new_benchmark() {
                 break
             fi
         done
-        # Accept oneshot-* as valid agent names
-        if [[ "$found" == true && -n "$agent_name_trimmed" ]] || [[ "$agent_name_trimmed" =~ ^oneshot-.* ]]; then
+        # Accept oneshot-* and planning_and_control as valid agent names
+        if [[ "$found" == true && -n "$agent_name_trimmed" ]] || [[ "$agent_name_trimmed" =~ ^oneshot-.* ]] || [[ "$agent_name_trimmed" == "planning_and_control" ]]; then
             if [[ "$agent_name_trimmed" == "oneshot" ]]; then
-                read -p "Enter engineer_model for oneshot agent: " engineer_model
                 agent_names_array+=("oneshot-$engineer_model")
             else
                 agent_names_array+=("$agent_name_trimmed")
             fi
         else
-            echo "Invalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml or use oneshot-<model>."
-            echo -e "\033[1;31mInvalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml or use oneshot-<model>.\033[0m"
+            echo "Invalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml, use oneshot-<model>, or planning_and_control."
+            echo -e "\033[1;31mInvalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml, use oneshot-<model>, or planning_and_control.\033[0m"
             echo -e "\033[1;31mPlease provide at least one agent.\033[0m"
         fi
     done

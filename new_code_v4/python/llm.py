@@ -93,10 +93,13 @@ def extract_code_block(code_str: str) -> str:
 
 
 def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_prices: dict, work_dir: str = None, engineer_model: str = None) -> LLM_response:
-    # Handle oneshot-engineer_model agent naming
+    # Handle oneshot/planning_and_control agent naming
     if agent.startswith('oneshot-'):
         llm_type = 'oneshot'
         engineer_model = agent[len('oneshot-'):]
+    elif agent == 'planning_and_control':
+        llm_type = 'planning_and_control'
+        engineer_model = None
     else:
         llm_type = find_llm_type(agent, llm_token_prices)
 
@@ -109,11 +112,11 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
     if max_tokens is None:
         max_tokens = 6000
 
-    # Per-agent extraction logic for code and token usage
     import importlib
     global cmbagent_module
-    if llm_type == 'oneshot' and cmbagent_module is None:
+    if llm_type in ['oneshot', 'planning_and_control'] and cmbagent_module is None:
         cmbagent_module = importlib.import_module('cmbagent')
+
     extraction_map = {
         'openai_gpt': {
             'client': llm_clients.get('openai_gpt'),
@@ -160,23 +163,31 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
                 0, 0
             )
         },
-        # 'planning_and_control': {
-        #     'client': None,
-        #     'call': lambda client: (
-        #         print("[INFO] Using cached cmbagent module..."),
-        #         cmbagent_module.planning_and_control(
-        #             task=prompt,
-        #             max_rounds=5,
-        #             agent='engineer',
-        #             engineer_model='gpt-4.1-2025-04-14',
-        #             work_dir=work_dir
-        #         )
-        #     )[1],
-        #     'extract_code': lambda response: next((extract_code_block(msg['content']) for msg in reversed(response['chat_history']) if extract_code_block(msg['content'])), ''),
-        #     'extract_tokens': lambda response: (
-        #         0, 0
-        #     )
-        # }
+        'planning_and_control': {
+            'client': None,
+            'call': lambda client: (
+                print("[INFO] Using cached cmbagent module..."),
+                cmbagent_module.planning_and_control_context_carryover(
+                    task=prompt,
+                    max_rounds_control=30,
+                    n_plan_reviews=1,
+                    max_n_attempts=2,
+                    max_plan_steps=2,
+                    engineer_model="gemini-2.5-pro",
+                    researcher_model="gpt-4.1-2025-04-14",
+                    plan_reviewer_model="claude-sonnet-4-20250514",
+                    plan_instructions=r"""
+Use engineer for whole analysis, and return final code with researcher at the very end. Plan must have between 3 and 5 steps.
+""",
+                    work_dir=work_dir,
+                    clear_work_dir=False
+                )
+            )[1],
+            'extract_code': lambda response: '',  # code will be read from file in run_benchmark.py
+            'extract_tokens': lambda response: (
+                0, 0
+            )
+        },
     }
 
     client = extraction_map[llm_type]['client']

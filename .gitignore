@@ -1,7 +1,8 @@
 cmbagent_env
 cmbagent_output
 cmbagent_output_archive
-cmbagent
+benchmark_output/
+cmbagent/
 data
 .cache/
 .ipynb_checkpoints/
@@ -30,3 +31,4 @@ run_current_benchmark.py
 test_read.sh
 understanding_cmbagent_oneshot_output.py
 testpyenv_env
+code_execution-strings.ipynb

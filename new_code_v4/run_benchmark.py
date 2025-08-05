@@ -24,6 +24,9 @@ benchmark_file_new = run_base_dir / pathlib.Path(benchmark_file).name
 os.rename(benchmark_file, benchmark_file_new)
 benchmark_file = str(benchmark_file_new)
 
+load_dotenv("/mnt/p/stage/cmbagent_benchmark/new_code_v4/.env")
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/mnt/p/stage/cmbagent_benchmark/cmbagent/camels-453517-7c2faf50eda2.json"
+
 # Start the benchmark
 print("\n\033[1;36m====================[ BENCHMARK RUNNER ]====================\033[0m")
 print(f"\033[1;33mConfiguration file:\033[0m {benchmark_file}\n")
@@ -131,10 +134,13 @@ for agent in agents:
     problem_ids_list = list(problems.keys())
     total_problems = len(problem_ids_list)
 
-    # Handle oneshot-engineer_model agent naming
+    # Handle oneshot/planning_and_control agent naming
     if agent.startswith('oneshot-'):
         llm_type = 'oneshot'
         engineer_model = agent[len('oneshot-'):]
+    elif agent == 'planning_and_control':
+        llm_type = 'planning_and_control'
+        engineer_model = None
     else:
         llm_type = find_llm_type(agent, llm_token_prices)
         engineer_model = None
@@ -155,6 +161,13 @@ for agent in agents:
             problem_dir.mkdir(parents=True, exist_ok=True)
             work_dir = str(problem_dir)
             llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices, work_dir=work_dir, engineer_model=engineer_model)
+            # For planning_and_control, override generated_code by reading from work_dir/control/codebase/*.py
+            if llm_type == 'planning_and_control':
+                control_codebase_dir = pathlib.Path(work_dir) / 'control' / 'codebase'
+                py_files = list(control_codebase_dir.glob('*.py'))
+                if py_files:
+                    with open(py_files[0], 'r') as f:
+                        llm_response.generated_code = f.read()
         else:
             llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices)
         test_case_result = run_test_cases(llm_response.generated_code, pathlib.Path(test_cases_folder_path) / problem_id)
