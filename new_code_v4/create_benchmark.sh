@@ -392,8 +392,8 @@ create_new_benchmark() {
     fi
 
     # Prompt for agent names
-    local model_config_path="new_code_v4/model_config.yaml"
-    local valid_agents=( $(grep -E '^[[:space:]]*name:' "$model_config_path" | sed -E 's/^[[:space:]]*name:[[:space:]]*"?([^"]*)"?.*/\1/') )
+    local model_config_path="/mnt/p/stage/cmbagent_benchmark/new_code_v4/model_config.yaml"
+    local valid_agents=( $(grep -E '^[[:space:]]*name:' "$model_config_path" | sed -E 's/^[[:space:]]*name:[[:space:]]*"?([^\"]*)"?.*/\1/') )
     local agent_names_array=()
     local agent_name
 
@@ -408,11 +408,12 @@ create_new_benchmark() {
                 break
             fi
         fi
-        # find all agent names in model_config.yaml which comes after "name:"
+        # Trim whitespace from both input and valid agent names
         agent_name_trimmed=$(echo "$agent_name" | xargs)
         found=false
         for valid_agent in "${valid_agents[@]}"; do
-            if [[ "$agent_name_trimmed" == "$valid_agent" ]]; then
+            valid_agent_trimmed=$(echo "$valid_agent" | xargs)
+            if [[ "$agent_name_trimmed" == "$valid_agent_trimmed" ]]; then
                 found=true
                 break
             fi

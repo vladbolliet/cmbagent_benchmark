@@ -31,7 +31,7 @@ Key Requirements for generating the solution:
 - Wrap the full solution in a <code> ... </code> block.
 - The function receives input_data as a list where each element represents a line of input which was read from a file. Example: If the data from the file was originally "3 5\n1 2 3\n\"hello\" 4\n3\n\"hi\"", then input_data will be [[3,5], [1,2,3], ["hello", 4], [3], ["hi"]].
 - Return the final answer in the exact format expected, as the input_data, even for single-line or single-value outputs. For example, if the answer is 9, return [[9]]; if the answer is [1, 5], return [[1, 5]]; if the answer is "hello hello hello", return [["hello", "hello", "hello"]]. Do not return a flat list or a single string.
-- Ensure efficiency and handle all constraints/edge cases.
+- Ensure efficiency (must be executed in under 10 seconds) and handle all constraints/edge cases.
 - Do not print anything, just return the answer
 - The code must be executable and free of syntax errors, unnecessary comments and explanations.
 
@@ -169,10 +169,10 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
                 print("[INFO] Using cached cmbagent module..."),
                 cmbagent_module.planning_and_control_context_carryover(
                     task=prompt,
-                    max_rounds_control=30,
+                    max_rounds_control=100, # how many messages exchanged between all agents
                     n_plan_reviews=1,
-                    max_n_attempts=2,
-                    max_plan_steps=2,
+                    max_n_attempts=3, # attemps of writing code after executing it
+                    max_plan_steps=5,
                     engineer_model="gemini-2.5-pro",
                     researcher_model="gpt-4.1-2025-04-14",
                     plan_reviewer_model="claude-sonnet-4-20250514",
