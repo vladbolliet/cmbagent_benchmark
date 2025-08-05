@@ -78,9 +78,13 @@ for problem_id in problem_ids:
 # initialise agents
 load_dotenv(dotenv_path=pathlib.Path(__file__).parent / ".env")
 
+
 llm_types = []
 for agent in agents:
-    llm_type = find_llm_type(agent, llm_token_prices)  # This will raise an error if the agent is not found in the model_config.yaml
+    if agent.startswith('oneshot-'):
+        llm_type = 'oneshot'
+    else:
+        llm_type = find_llm_type(agent, llm_token_prices)
     if llm_type not in llm_types:
         llm_types.append(llm_type)
 
@@ -106,6 +110,7 @@ for llm_type in llm_types:
 
 benchmark_dict['results'] = {agent: {} for agent in agents}
 
+
 for agent in agents:
     agent_idx = agents.index(agent) + 1
     print(f"\n\033[1;34m---[ Agent {agent_idx}/{len(agents)}: {agent} ]---\033[0m")
@@ -126,7 +131,14 @@ for agent in agents:
     problem_ids_list = list(problems.keys())
     total_problems = len(problem_ids_list)
 
-    llm_type = find_llm_type(agent, llm_token_prices)
+    # Handle oneshot-engineer_model agent naming
+    if agent.startswith('oneshot-'):
+        llm_type = 'oneshot'
+        engineer_model = agent[len('oneshot-'):]
+    else:
+        llm_type = find_llm_type(agent, llm_token_prices)
+        engineer_model = None
+
     # Only create agent subfolder for oneshot and planning_and_control
     if llm_type in ['oneshot', 'planning_and_control']:
         agent_dir = run_base_dir / llm_type
@@ -142,7 +154,7 @@ for agent in agents:
             problem_dir = agent_dir / problem_id
             problem_dir.mkdir(parents=True, exist_ok=True)
             work_dir = str(problem_dir)
-            llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices, work_dir=work_dir)
+            llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices, work_dir=work_dir, engineer_model=engineer_model)
         else:
             llm_response = get_llm_response(prompt, agent, llm_clients, llm_token_prices)
         test_case_result = run_test_cases(llm_response.generated_code, pathlib.Path(test_cases_folder_path) / problem_id)

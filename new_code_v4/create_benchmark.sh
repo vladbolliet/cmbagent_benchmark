@@ -417,12 +417,18 @@ create_new_benchmark() {
                 break
             fi
         done
-        if [[ "$found" == true && -n "$agent_name_trimmed" ]]; then
-            agent_names_array+=("$agent_name_trimmed")
+        # Accept oneshot-* as valid agent names
+        if [[ "$found" == true && -n "$agent_name_trimmed" ]] || [[ "$agent_name_trimmed" =~ ^oneshot-.* ]]; then
+            if [[ "$agent_name_trimmed" == "oneshot" ]]; then
+                read -p "Enter engineer_model for oneshot agent: " engineer_model
+                agent_names_array+=("oneshot-$engineer_model")
+            else
+                agent_names_array+=("$agent_name_trimmed")
+            fi
         else
-            echo "Invalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml."
-    echo -e "\033[1;31mInvalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml.\033[0m"
-    echo -e "\033[1;31mPlease provide at least one agent.\033[0m"
+            echo "Invalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml or use oneshot-<model>."
+            echo -e "\033[1;31mInvalid agent name: '$agent_name_trimmed'. Please enter valid agent names from model_config.yaml or use oneshot-<model>.\033[0m"
+            echo -e "\033[1;31mPlease provide at least one agent.\033[0m"
         fi
     done
     # Join agent names with commas for YAML output

@@ -91,8 +91,15 @@ def extract_code_block(code_str: str) -> str:
     # If nothing found, return empty string
     return ''
 
-def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_prices: dict, work_dir: str = None) -> LLM_response:
-    llm_type = find_llm_type(agent, llm_token_prices)
+
+def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_prices: dict, work_dir: str = None, engineer_model: str = None) -> LLM_response:
+    # Handle oneshot-engineer_model agent naming
+    if agent.startswith('oneshot-'):
+        llm_type = 'oneshot'
+        engineer_model = agent[len('oneshot-'):]
+    else:
+        llm_type = find_llm_type(agent, llm_token_prices)
+
     # Get max_output_tokens from config
     max_tokens = None
     for category, models in llm_token_prices.items():
@@ -144,7 +151,7 @@ def get_llm_response(prompt: str, agent: str, llm_clients: dict, llm_token_price
                     task=prompt,
                     max_rounds=5,
                     agent='engineer',
-                    engineer_model='gpt-4.1-2025-04-14',
+                    engineer_model=engineer_model if engineer_model else 'gpt-4.1-2025-04-14',
                     work_dir=work_dir
                 )
             )[1],
