@@ -1,3 +1,33 @@
+# --- Output normalization utility ---
+def normalize_llm_output(output):
+    """
+    Ensures the output is a list of lists, splits single string elements by whitespace,
+    and converts numeric strings to int or float as appropriate.
+    Example:
+        [['hello world']] -> [['hello', 'world']]
+        [['5.4']] -> [[5.4]]
+        [['5']] -> [[5]]
+        [['hello', '5']] -> [['hello', 5]]
+    """
+    def convert_token(token):
+        # Try int, then float, else keep as string
+        try:
+            return int(token)
+        except ValueError:
+            try:
+                return float(token)
+            except ValueError:
+                return token
+
+    normalized = []
+    for row in output:
+        if len(row) == 1 and isinstance(row[0], str):
+            # Split by whitespace
+            tokens = row[0].strip().split()
+            normalized.append([convert_token(tok) for tok in tokens])
+        else:
+            normalized.append([convert_token(tok) for tok in row])
+    return normalized
 
 # this file handles everything related to the LLMs, like creating the prompt, calling the API, and processing the response
 

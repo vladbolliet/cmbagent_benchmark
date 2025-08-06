@@ -15,6 +15,8 @@ class ExecutionStatus(Enum):
     SYSTEM_ERROR = "system_error"
 
 def run_test_cases(generated_code: str, test_cases_folder_path: pathlib.Path) -> dict:
+    # Import normalization utility from llm.py
+    from python.llm import normalize_llm_output
     import multiprocessing
     def run_main_function_in_subprocess(main_function, input_data, queue):
         try:
@@ -76,39 +78,29 @@ def run_test_cases(generated_code: str, test_cases_folder_path: pathlib.Path) ->
         }
 
     # Run each test case one by one
+    def parse_line(line):
+        elements = []
+        for item in line.strip().split():
+            try:
+                elements.append(int(item))
+            except ValueError:
+                elements.append(item)
+        return elements
+
+
     for idx, (input_path, output_path) in enumerate(test_pairs):
         try:
             # Read and parse input
             with open(input_path, "r") as f:
                 input_lines = f.read().splitlines()
-            input_data = []
-            for line in input_lines:
-                elements = []
-                for item in re.findall(r'"[^"]*"|\S+', line):
-                    if item.startswith('"') and item.endswith('"'):
-                        elements.append(item[1:-1])
-                    else:
-                        try:
-                            elements.append(int(item))
-                        except ValueError:
-                            elements.append(item)
-                input_data.append(elements)
+            input_data = [parse_line(line) for line in input_lines if line.strip()]
+            input_data = normalize_llm_output(input_data)
 
             # Read and parse expected output
             with open(output_path, "r") as f:
                 output_lines = f.read().splitlines()
-            expected_output = []
-            for line in output_lines:
-                elements = []
-                for item in re.findall(r'"[^"]*"|\S+', line):
-                    if item.startswith('"') and item.endswith('"'):
-                        elements.append(item[1:-1])
-                    else:
-                        try:
-                            elements.append(int(item))
-                        except ValueError:
-                            elements.append(item)
-                expected_output.append(elements)
+            expected_output = [parse_line(line) for line in output_lines if line.strip()]
+            expected_output = normalize_llm_output(expected_output)
 
             # Run main_function with timeout
             queue = multiprocessing.Queue()
@@ -121,7 +113,7 @@ def run_test_cases(generated_code: str, test_cases_folder_path: pathlib.Path) ->
                 os.remove(temp_code_path)
                 return {
                     "status": ExecutionStatus.TIMEOUT.value,
-                    "failed_on_test_case": idx,
+                    "failed_on_test_case": idx + 1,
                     "error_description": f"Timeout after {TIMEOUT_SECONDS} seconds"
                 }
             if not queue.empty():
@@ -130,15 +122,16 @@ def run_test_cases(generated_code: str, test_cases_folder_path: pathlib.Path) ->
                     os.remove(temp_code_path)
                     return {
                         "status": ExecutionStatus.RUNTIME_ERROR.value,
-                        "failed_on_test_case": idx,
+                        "failed_on_test_case": idx + 1,
                         "error_description": f"Runtime error: {result_or_error}"
                     }
-                result = result_or_error
+                # Normalize the output format here
+                result = normalize_llm_output(result_or_error)
             else:
                 os.remove(temp_code_path)
                 return {
                     "status": ExecutionStatus.SYSTEM_ERROR.value,
-                    "failed_on_test_case": idx,
+                    "failed_on_test_case": idx + 1,
                     "error_description": "No result returned from subprocess."
                 }
 
@@ -147,14 +140,14 @@ def run_test_cases(generated_code: str, test_cases_folder_path: pathlib.Path) ->
                 os.remove(temp_code_path)
                 return {
                     "status": ExecutionStatus.WRONG_ANSWER.value,
-                    "failed_on_test_case": idx,
+                    "failed_on_test_case": idx + 1,
                     "error_description": f"Wrong answer. Output: {result}, Expected: {expected_output}"
                 }
         except Exception as e:
             os.remove(temp_code_path)
             return {
                 "status": ExecutionStatus.SYSTEM_ERROR.value,
-                "failed_on_test_case": idx,
+                "failed_on_test_case": idx + 1,
                 "error_description": f"System error: {e}"
             }
 
