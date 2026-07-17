@@ -16,7 +16,7 @@ benchmark_file = args.benchmark_file
 
 # Determine run folder structure
 run_time_str = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
-run_base_dir = pathlib.Path("/mnt/p/stage/cmbagent_benchmark/new_code_v4/benchmark_output/runs") / run_time_str
+run_base_dir = pathlib.Path(__file__).parent / "benchmark_output" / "runs" / run_time_str
 run_base_dir.mkdir(parents=True, exist_ok=True)
 
 # Place benchmark_file inside run_base_dir
@@ -24,7 +24,7 @@ benchmark_file_new = run_base_dir / pathlib.Path(benchmark_file).name
 os.rename(benchmark_file, benchmark_file_new)
 benchmark_file = str(benchmark_file_new)
 
-load_dotenv("/mnt/p/stage/cmbagent_benchmark/new_code_v4/.env")
+load_dotenv(pathlib.Path(__file__).parent / ".env")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/mnt/p/stage/cmbagent_benchmark/cmbagent/camels-453517-7c2faf50eda2.json"
 
 # Start the benchmark
